@@ -1,0 +1,10 @@
+{
+    "target_locations": [
+      
+      "高雄市/杉林區",
+      "高雄市/林園區",
+      "高雄市/大寮區"
+    ],
+    "output_filename": "data.csv"
+  }
+  

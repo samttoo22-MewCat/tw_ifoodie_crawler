@@ -2,7 +2,8 @@ import csv
 import json
 import sys
 from time import sleep
-import undetected_chromedriver as uc
+import time
+import traceback
 from selenium.webdriver.common.by import By
 import auto_download_undetected_chromedriver
 from auto_download_undetected_chromedriver import download_undetected_chromedriver
@@ -16,7 +17,7 @@ from seleniumbase import Driver
 
 class tw_ifoodie_crawler():
     def __init__(self):
-        def get_ChromeOptions(): 
+        """def get_ChromeOptions(): 
             options = uc.ChromeOptions()
             options.add_argument('--start_maximized')
             options.add_argument("--disable-extensions")
@@ -32,13 +33,13 @@ class tw_ifoodie_crawler():
             options.add_argument("--disable-dev-shm-usage")
             options.add_argument("--user-data-dir={}".format(os.path.abspath("profile1")))
             return options
-        
+        """
         #self.browser_executable_path = ""
         #download_undetected_chromedriver(self.browser_executable_path, undetected=True, arm=False, force_update=True)
         #self.browser_executable_path = os.path.abspath("chromedriver.exe")
         
         #self.driver = uc.Chrome(options=get_ChromeOptions(), executable_path=self.browser_executable_path, version_main=110)
-        self.driver = Driver(uc=True, headless=True)
+        self.driver = Driver(uc=True, headless=True, agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.50 Safari/537.36")
         self.wait = WebDriverWait(self.driver, 10, poll_frequency=1, ignored_exceptions=[ElementNotVisibleException, ElementNotSelectableException])
         
         self.config = self.load_config()    
@@ -55,9 +56,12 @@ class tw_ifoodie_crawler():
         for place in self.config['target_locations']:
             print(f"⭐ {place} ...")
             self.driver.get(f"https://ifoodie.tw/explore/{place}/list")
-            self.wait.until(EC.presence_of_element_located((By.XPATH, "//div[@class='jsx-320828271 restaurant-item  track-impression-ga']")))
+            time.sleep(1)
             
-            pages = self.driver.find_elements(By.XPATH, "//ul[@class='pagination']/li")
+            try:
+                pages = self.driver.find_elements(By.XPATH, "//ul[@class='pagination']/li")
+            except:
+                pages = 1
 
             if(len(pages) == 1):
                 pages = 1
@@ -69,33 +73,83 @@ class tw_ifoodie_crawler():
                 continue
             
             for page in range(pages):
+                def refresh_page():
+                    self.driver.get(f"https://ifoodie.tw/explore/{place}/list?page={page}")
+                    #self.wait.until(EC.presence_of_element_located((By.XPATH, "//div[@class='jsx-320828271 restaurant-item  track-impression-ga']")))
+                    #self.wait.until(EC.presence_of_element_located((By.XPATH, "//ul[@class='pagination']/li")))
+                    #self.wait.until(EC.presence_of_element_located((By.XPATH, "//a[contains(@class, 'title-text')]")))
+                    time.sleep(1)
+                    self.driver.execute_script("window.stop()")
+                    self.driver.switch_to.default_content()
                 print("⭐ Page " + str(page) + " ...")
-                self.driver.get(f"https://ifoodie.tw/explore/{place}/list?page={page}")
-                self.wait.until(EC.presence_of_element_located((By.XPATH, "//div[@class='jsx-320828271 restaurant-item  track-impression-ga']")))
+                refresh_page()
+                
                 restaurants = self.driver.find_elements(By.XPATH, "//div[@class='jsx-320828271 restaurant-item  track-impression-ga']")
+                scroll_box = self.driver.find_element(By.CSS_SELECTOR, '#search-scroll-box')
                 print(len(restaurants))
                 count = 0
+                
                 for restaurant in restaurants:
+                    # 獲取JavaScriptExecutor
+                    js = self.driver.execute_script
+                    # 這將scroll box滾動到底部
+                    js("arguments[0].scrollTop = 1000", scroll_box)
+                    
                     count += 1
                     print(f"⭐ Restaurant {count} / {len(restaurants)} ...")
                     try:
                         restaurant_note = restaurant.find_element(By.XPATH, ".//div[contains(@class, 'primary-checkin')]/a").get_attribute("href")
                     except:
                         restaurant_note = ""
-                    
+
+
                     try:
-                        restaurant_title = restaurant.find_element(By.XPATH, ".//a[contains(@class, 'title-text')]").get_attribute("textContent")
+                        restaurant_info = restaurant.find_elements(By.XPATH, ".//a")
+
+                        restaurant_title = restaurant_info[2].get_attribute("textContent")
+                        restaurant_types = []
+                        restaurant_types_list = restaurant.find_elements(By.XPATH, ".//a[contains(@class, 'category')]")
+                        for r in restaurant_types_list:
+                            if r.get_attribute("textContent") != "附近餐廳":
+                                restaurant_types.append(r.get_attribute("textContent"))
                         restaurant_address = restaurant.find_element(By.XPATH, ".//div[contains(@class, 'address-row')]").get_attribute("textContent")
                         restaurant_page = restaurant.find_element(By.XPATH, ".//a[contains(@class, 'title-text')]").get_attribute("href") 
+                        
+                        print(restaurant_title, restaurant_address, restaurant_page, restaurant_note, restaurant_types)
                     except Exception as e:
-                        print(e)
-                        print("restaurant error")
-                        print(restaurant.get_attribute("outerHTML"))
+                        
+                        print(f"Error: {type(e).__name__} - {str(e)}")
+                        traceback_str = traceback.format_exc()
+                        print(traceback_str)
+                        
+                        
+                        #print(restaurant.get_attribute("outerHTML"))
+                        
+                        self.driver.get_screenshot_as_file("screenshot.png")
+                        
+                        self.driver.switch_to.default_content()
+                        iframes = self.driver.find_elements(By.TAG_NAME, ("iframe"))
+                        for iframe in iframes:
+                            # 切換到當前iframe
+                            self.driver.switch_to.frame(iframe)
+                            
+                            # 嘗試在當前iframe中找到目標元素
+                            try:
+                                element = self.driver.find_element(By.XPATH, "//div[@class='jsx-320828271 restaurant-item  track-impression-ga']")
+                                print("元素找到在iframe:", iframe)
+                                # 執行其他操作...
+                                break
+                            except:
+                                # 如果在當前iframe中找不到元素,切換回上層
+                                self.driver.switch_to.default_content()
+                        
                         sys.exit()
-                        continue
+                        #print(restaurant.get_attribute("outerHTML"))
+
+                            
                 
                     with open(self.output_filename, mode='a', encoding='utf-8', newline='') as csv_file:
-                        fieldnames = ["restaurant_title", "restaurant_address", "restaurant_page", "restaurant_note"]
+                        fieldnames = ["restaurant_title", "restaurant_address", "restaurant_page", "restaurant_note", "restaurant_types"]
                         writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
                         # Check if the file is empty, if so, write the header
                         csv_file.seek(0, 2)  # Move to the end of file
@@ -106,7 +160,8 @@ class tw_ifoodie_crawler():
                             "restaurant_title": restaurant_title,
                             "restaurant_address": restaurant_address,
                             "restaurant_page": restaurant_page,
-                            "restaurant_note": restaurant_note
+                            "restaurant_note": restaurant_note,
+                            "restaurant_types": restaurant_types
                         }
                         writer.writerow(data)
     
