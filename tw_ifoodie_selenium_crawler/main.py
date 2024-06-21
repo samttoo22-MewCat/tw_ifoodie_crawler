@@ -5,8 +5,6 @@ from time import sleep
 import time
 import traceback
 from selenium.webdriver.common.by import By
-import auto_download_undetected_chromedriver
-from auto_download_undetected_chromedriver import download_undetected_chromedriver
 import os
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
